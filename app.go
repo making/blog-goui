@@ -5,24 +5,44 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"os"
+	"strconv"
+	"html/template"
 )
 
 const (
-	DEFAULT_PORT = "9000"
+	DefaultPort = "9000"
+	DefaultApiUrl = "https://blog-api.cfapps.io/api"
 )
 
 func main() {
 	var port string
 	if port = os.Getenv("PORT"); len(port) == 0 {
-		log.Printf("Warning, PORT not set. Defaulting to %+v", DEFAULT_PORT)
-		port = DEFAULT_PORT
+		log.Printf("Warning, PORT not set. Defaulting to %+v", DefaultPort)
+		port = DefaultPort
+	}
+	var apiUrl string
+	if apiUrl = os.Getenv("API_URL"); len(apiUrl) == 0 {
+		log.Printf("Warning, API_URL not set. Defaulting to %+v", DefaultApiUrl)
+		apiUrl = DefaultApiUrl
 	}
 
-	s := service.NewService("https://blog-api.cfapps.io/api")
+	s := service.NewService(apiUrl)
 	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
-		entry, _ := s.GetEntry(300)
-		c.String(200, entry.GetFrontMatter().GetTitle())
+	r.GET("/entries/:entryId", func(c *gin.Context) {
+		entryId, err := strconv.ParseInt(c.Param("entryId"), 10, 32)
+		if err != nil {
+			log.Println("Error: ", err)
+			c.String(400, "error!")
+		} else {
+			entry, _ := s.GetEntry(entryId)
+			model := gin.H{
+				"Title": entry.GetFrontMatter().GetTitle(),
+				"Content": entry.GetContent(),
+			}
+			tmpl := template.Must(template.ParseFiles("templates/layout.html", "templates/entry.html"))
+			tmpl.Execute(c.Writer, model)
+		}
 	})
+	
 	r.Run(":" + port)
 }
